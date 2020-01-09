@@ -1,0 +1,104 @@
+version: '3.7'
+
+services:
+  mongo1:
+    build:
+      context: .
+      dockerfile: ./docker/mongo/Dockerfile
+    env_file: ./docker/mongo/mongo.env
+    volumes:
+      - mongo-volume-dev:/data/db
+    ports:
+      - 27017:27017
+    networks:
+      - mongo
+    command: --bind_ip_all --replSet gd
+    restart: on-failure
+
+  es1:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.1.1
+    environment:
+      - node.name=es1
+      - discovery.seed_hosts=es1
+      - cluster.initial_master_nodes=es1
+      - cluster.name=gd
+      - bootstrap.memory_lock=true
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - 9200
+    networks:
+      - es
+    restart: on-failure
+
+  elastichq:
+    image: elastichq/elasticsearch-hq
+    ports:
+      - 5000:5000
+    environment:
+      - HQ_DEFAULT_URL=http://es1:9200
+    networks:
+      - es
+    restart: on-failure
+
+  monstache:
+    image: rwynn/monstache:4.15.1
+    depends_on:
+      - es1
+      - mongo1
+    environment:
+      - MONSTACHE_MONGO_URL=mongodb://${MONSTACHE_MONGO_USER}:${MONSTACHE_MONGO_PASSWORD}@mongo1:27017
+      - MONSTACHE_ES_URLS=http://es1:9200
+      - MONSTACHE_ES_USER=${ELASTIC_USER}
+      - MONSTACHE_ES_PASS=${ELASTIC_PASSWORD}
+    networks:
+      - mongo
+      - es
+    command: -resume -replay -verbose
+    restart: on-failure
+
+  api:
+    build:
+      context: .
+      dockerfile: ./docker/api/Dockerfile
+    ports:
+      - 8000:8000
+    volumes:
+      - ./api:/usr/src/app
+      - ./python-yrest:/usr/src/python-yrest
+    networks:
+      - mongo
+      - es
+      - frontend
+    environment:
+      - MONGO_URI=mongodb://${API_MONGO_USER}:${API_MONGO_PASSWORD}@mongo1/?authMechanism=SCRAM-SHA-256
+      - MAIL_USER=${MAIL_USER}
+      - MAIL_PASSWORD=${MAIL_PASSWORD}
+    depends_on:
+      - mongo1
+      - es1
+    restart: on-failure
+
+  # gui:
+  #   build:
+  #     context: .
+  #     dockerfile: ./docker/gui/Dockerfile
+  #   ports:
+  #     - 80:80
+  #   networks:
+  #     - frontend
+  #   depends_on:
+  #     - api
+  #   restart: on-failure
+
+networks:
+  mongo:
+  es:
+  frontend:
+
+volumes:
+  mongo-volume-dev:
