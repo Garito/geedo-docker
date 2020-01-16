@@ -6,9 +6,9 @@ RUN pip install -U setuptools pip && \
 
 # RUN pip install pytest Faker pytest-cov
 
-RUN pip install git+https://github.com/Garito/python-yrest.git
-# COPY ./python-yrest/ /usr/src/python-yrest/
-# RUN pip install -e /usr/src/python-yrest
+# RUN pip install git+https://github.com/Garito/python-yrest.git
+COPY ./python-yrest/ /usr/src/python-yrest/
+RUN pip install -e /usr/src/python-yrest
 
 RUN adduser --disabled-password --gecos '' appuser
 USER appuser
